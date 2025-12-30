@@ -106,26 +106,62 @@ def fetch_openlibrary_book(isbn: str, timeout_s: int = 10, debug: bool = False,)
         cover = b["cover"].get("large") or b["cover"].get("medium") or b["cover"].get("small")
     cover = cover or f"https://covers.openlibrary.org/b/ISBN/{isbn}-L.jpg"
 
-    b = data[key]
+    ol_idents = b.get("identifiers") or {}
+    isbn10_list = ol_idents.get("isbn_10") or []
+    isbn13_list = ol_idents.get("isbn_13") or []
+
+    # Choose a "best" isbn10/isbn13 (simple: first non-empty)
+    isbn10 = next((x for x in isbn10_list if x), None)
+    isbn13 = next((x for x in isbn13_list if x), None)
+
+    subjects = b.get("subjects") or []
+    subject_places = b.get("subject_places") or []
+    subject_people = b.get("subject_people") or []
+    subject_times = b.get("subject_times") or []
+
+    external_links = []
+    for L in (b.get("links") or []):
+        if isinstance(L, dict) and L.get("url"):
+            external_links.append({"title": L.get("title"), "url": L.get("url")})
+
     resp = {
         "type": "book",
         "identifiers": {
-            "isbn": isbn,
-            "isbn10": None,
-            "isbn13": isbn if len(isbn) == 13 else None,
+            "isbn": isbn13 or isbn10 or isbn,
+            "isbn10": isbn10,
+            "isbn13": isbn13 or (isbn if len(isbn) == 13 else None),
         },
+        "title": b.get("title"),
         "subtitle": b.get("subtitle"),
         "authors": [a.get("name") for a in b.get("authors", []) if a.get("name")],
         "publish_date": format_publish_date(b.get("publish_date")),
         "nb_pages": b.get("number_of_pages"),
         "publishers": [p.get("name") for p in b.get("publishers", []) if p.get("name")],
         "genres": extract_unique_genres([s.get("name") for s in b.get("subjects", []) if s.get("name")]),
-        "language": None,  # openlibrary 'data' payload doesn't reliably include it
+        
+        "subjects": {
+            "subjects": [s.get("name") for s in subjects if s.get("name")],
+            "places": [s.get("name") for s in subject_places if s.get("name")],
+            "people": [s.get("name") for s in subject_people if s.get("name")],
+            "times": [s.get("name") for s in subject_times if s.get("name")],
+        },
+        "classifications": b.get("classifications") or {},
+        "language": None,
         "description": (b.get("notes") if isinstance(b.get("notes"), str) else None),
+
         "cover_image": cover,
+
         "links": {
             "openlibrary": b.get("url"),
+            "openlibrary_key": b.get("key"),  # e.g. /books/OL37023475M
+            "external": external_links,        # OL 'links' field
         },
+
+        "extra": {
+            "pagination": b.get("pagination"),
+            "weight": b.get("weight"),
+        },
+
         "sources": [{"provider": "openlibrary", "provider_key": key}],
     }
     return resp
@@ -178,22 +214,37 @@ def fetch_google_books(isbn: str, timeout_s: int = 10, debug: bool = False) -> d
         "genres": extract_unique_genres(v.get("categories", []) or []),
         "language": v.get("language"),
         "description": desc,
+
         "cover_image": _choose_cover_from_google(v),
+
         "links": {
             "google": v.get("infoLink"),
             "preview": v.get("previewLink"),
             "canonical": v.get("canonicalVolumeLink"),
         },
+
         "sources": [{"provider": "google_books", "provider_key": item.get("id")}],
     }
+
+    resp["extra"] = {
+        "print_type": v.get("printType"),
+        "maturity_rating": v.get("maturityRating"),
+    }
+
+    resp["links"] = {
+        **resp.get("links", {}),
+        "google_self": item.get("selfLink"),
+    }
+    
     return resp
 
 def fetch_book_with_fallback(isbn: str, merge: bool = True, debug: bool = False) -> dict[str, Any] | None:
     ol = fetch_openlibrary_book(isbn, debug=debug)
     gb = None
 
-    if ol and merge:
-        # try to enrich (language/description/isbns/cover)
+    if ol:
+        if not merge:
+            return ol
         gb = fetch_google_books(isbn, debug=debug)
         return merge_book_data(ol, gb) if gb else ol
 
@@ -221,7 +272,7 @@ def listen_scanner(prompt: str = "Scan barcode/ISBN: "):
         yield isbn
 
 
-# 
+# Data manips
 def _choose_cover_from_google(v: dict[str, Any]) -> str | None:
     links = v.get("imageLinks") or {}
     return (
@@ -250,10 +301,29 @@ def merge_book_data(primary: dict[str, Any], secondary: dict[str, Any]) -> dict[
     Keep primary as authority, fill missing fields from secondary.
     Merge lists uniquely. Merge identifiers.
     """
+    if not secondary:
+        return primary
+    
     out = {**primary}
 
     # identifiers
-    out_id = {**(secondary.get("identifiers") or {}), **(primary.get("identifiers") or {})}
+    prim_id = primary.get("identifiers") or {}
+    sec_id = secondary.get("identifiers") or {}
+    out_id = dict(sec_id)
+
+    # identifiers.other merge
+    prim_other = (primary.get("identifiers") or {}).get("other") or {}
+    sec_other = (secondary.get("identifiers") or {}).get("other") or {}
+    out["identifiers"]["other"] = {**sec_other, **prim_other}
+
+    for k, v in prim_id.items():
+        # keep primary only if it actually has a value
+        if v is None:
+            continue
+        if isinstance(v, str) and not v.strip():
+            continue
+        out_id[k] = v
+
     out["identifiers"] = out_id
 
     # scalar fields to backfill
@@ -294,5 +364,26 @@ def merge_book_data(primary: dict[str, Any], secondary: dict[str, Any]) -> dict[
         seen.add(key)
         uniq.append(s)
     out["sources"] = uniq
+
+    # subjects merge (union lists)
+    for sk in ("subjects", "places", "people", "times"):
+        a = ((primary.get("subjects") or {}).get(sk) or [])
+        b = ((secondary.get("subjects") or {}).get(sk) or [])
+        seen = set()
+        merged = []
+        for x in a + b:
+            if not x:
+                continue
+            k = str(x).strip().lower()
+            if k and k not in seen:
+                seen.add(k)
+                merged.append(x)
+        out.setdefault("subjects", {})[sk] = merged
+
+    # classifications merge (dict)
+    out["classifications"] = {**(secondary.get("classifications") or {}), **(primary.get("classifications") or {})}
+
+    # extra merge (dict)
+    out["extra"] = {**(secondary.get("extra") or {}), **(primary.get("extra") or {})}
 
     return out

@@ -5,18 +5,44 @@
 <h1>Scan</h1>
 <p class="muted">Focus the input and scan. Press Enter or click Lookup.</p>
 
-<div class="row">
-    <input id="code" placeholder="Scan ISBN / ASIN…" autocomplete="off" />
-    <button id="btnLookup" type="button">Lookup</button>
-    <button id="btnSave" type="button" disabled>Save</button>
-    <button id="btnClear" type="button">Clear</button>
+<div class="row flex start">
+    <div class="flex col" style="width: calc(max(70%, 600px));">
+        <input id="code" placeholder="Scan ISBN / ASIN…" autocomplete="off" />
 
-    <label class="muted" style="display:flex;align-items:center;gap:8px;">
-        <input id="scannerMode" type="checkbox" />
-        Scanner mode
-    </label>
-    <input id="scannerDelay" type="number" min="50" step="50" value="250" style="width:110px" />
-    <span class="muted">ms</span>
+        <div class="flex full space-between">
+            <div class="flex">
+                <button id="btnLookup" type="button" class="mb-0">Lookup</button>
+                <button id="btnSave" type="button" class="mb-0" disabled>Save</button>
+                <button id="btnClear" type="button" class="secondary mb-0">Clear</button>
+            </div>
+
+            <div class="flex fit-w">
+                <input id="scannerMode" type="checkbox" />
+                <label class="muted">Scanner mode</label>
+                <div id="scannerDelay" class="hidden flex fit-w">
+                    <input id="scannerDelayInput" type="number" min="50" step="50" value="250" style="width:110px"
+                        class="mb-0" />
+                    <span class="muted">ms</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex start fit-w">
+        <button id="btnRefreshAll" class="secondary">
+            🔄 Refresh all books
+        </button>
+        <label>
+            <input type="checkbox" id="refreshDryRun" checked>
+            Dry-run
+        </label>
+
+        <section id="refreshReport" style="display:none; margin-top: 1rem;">
+            <h3 style="margin:0 0 .5rem 0;">Refreshed books</h3>
+            <div id="refreshList"></div>
+        </section>
+
+    </div>
 </div>
 
 <div id="status" class="card" style="display:none;"></div>

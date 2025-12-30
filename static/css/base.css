@@ -82,6 +82,7 @@ button {
     padding: 10px 12px;
     font-size: 16px;
     cursor: pointer;
+    height: fit-content;
 }
 
 .muted {
@@ -114,4 +115,45 @@ img {
     display: grid;
     grid-template-columns: 160px 1fr;
     gap: 12px;
+}
+
+.flex {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.flex.col {
+    flex-direction: column;
+}
+
+.flex.start {
+    align-items: flex-start;
+}
+
+.flex.end {
+    justify-content: flex-end;
+}
+
+.flex.space-between {
+    justify-content: space-between;
+}
+
+.flex.full {
+    width: 100%;
+}
+
+.flex.fit-h,
+.flex.fit-height {
+    height: fit-content;
+}
+
+.flex.fit-w,
+.flex.fit-width {
+    width: fit-content;
+}
+
+label {
+    margin-bottom: 0 !important;
 }

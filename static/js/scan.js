@@ -1,5 +1,9 @@
 // static/js/scan.js
 import { apiPost } from "./api.js";
+import { getCookie, setCookie } from "./cookies.js";
+
+const COOKIE_SCANNER_MODE = "scanner_mode";
+const COOKIE_SCANNER_DELAY = "scanner_delay";
 
 const els = {
     code: document.getElementById("code"),
@@ -17,10 +21,67 @@ const els = {
 
     scannerMode: document.getElementById("scannerMode"),
     scannerDelay: document.getElementById("scannerDelay"),
+    scannerDelayInput: document.getElementById("scannerDelayInput"),
+
+    btnRefreshAll: document.getElementById("btnRefreshAll"),
+    chkDryRun: document.getElementById("refreshDryRun"),
+    refreshReport: document.getElementById("refreshReport"),
+    refreshList: document.getElementById("refreshList"),
 };
+
+
+// --- State ---
 
 let lastLookup = null; // { kind, value, book, error }
 let lookupTimer = null;
+
+
+// --- Helpers ---
+
+function clearRefreshReport() {
+    if (!els.refreshReport || !els.refreshList) return;
+    els.refreshReport.style.display = "none";
+    els.refreshList.innerHTML = "";
+}
+
+function renderRefreshReport(result) {
+    if (!els.refreshReport || !els.refreshList) return;
+
+    const items = result?.updated_items || [];
+    if (!items.length) {
+        els.refreshReport.style.display = "none";
+        return;
+    }
+
+    els.refreshReport.style.display = "block";
+
+    els.refreshList.innerHTML = items.map(it => {
+        const title = (it.title || "(no title)") + (it.subtitle ? ` — ${it.subtitle}` : "");
+        const srcs = (it.sources || []).join(" + ") || "unknown";
+        const isbn = it.isbn || "";
+        return `
+          <label style="display:flex; gap:.5rem; align-items:flex-start; padding:.4rem 0;">
+            <input type="checkbox" checked disabled>
+            <div>
+              <div><strong>${escapeHtml(title)}</strong></div>
+              <div style="opacity:.75; font-size:.9em;">
+                ISBN: <code>${escapeHtml(isbn)}</code> · Source: ${escapeHtml(srcs)}
+              </div>
+            </div>
+          </label>
+        `;
+    }).join("");
+}
+
+function escapeHtml(s) {
+    return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
 
 // UI
 function showStatus(msg, isError = false) {
@@ -90,6 +151,12 @@ function renderLookup(result) {
     els.btnSave.disabled = false;
 }
 
+function updateScannerUI() {
+    if (!els.scannerMode || !els.scannerDelay) return;
+    els.scannerDelayInput.disabled = !els.scannerMode.checked;
+    els.scannerDelay.classList.toggle("hidden", !els.scannerMode.checked);
+}
+
 
 // ----- API -----
 
@@ -127,13 +194,37 @@ async function doSave() {
 function scheduleLookup() {
     if (!els.scannerMode?.checked) return;
 
-    const ms = Math.max(50, Math.min(2000, Number(els.scannerDelay?.value || 250)));
+    const ms = Math.max(50, Math.min(2000, Number(els.scannerDelayInput?.value || 250)));
 
     if (lookupTimer) clearTimeout(lookupTimer);
     lookupTimer = setTimeout(() => {
         lookupTimer = null;
         doLookup();
     }, ms);
+}
+
+async function refreshAllBooks() {
+    if (!confirm("Refresh all books from OpenLibrary / Google Books?")) return;
+
+    showStatus("Refreshing all books...");
+
+    try {
+        const result = await apiPost("/api/books/refresh", {
+            dry_run: els.chkDryRun?.checked ?? false,
+            only_missing: false,
+        });
+
+        els.raw.textContent = JSON.stringify(result, null, 2);
+        renderRefreshReport(result);
+
+        showStatus(
+            `Done: ${result.counts.updated} updated · ` +
+            `${result.counts.skipped} skipped · ` +
+            `${result.counts.failed} failed`
+        );
+    } catch (e) {
+        showStatus(e.message || "Refresh failed", true);
+    }
 }
 
 
@@ -150,7 +241,7 @@ els.btnClear.addEventListener("click", () => {
     els.code.value = "";
     clearUI();
     els.code.focus();
-    
+
     if (lookupTimer) {
         clearTimeout(lookupTimer);
         lookupTimer = null;
@@ -174,8 +265,34 @@ els.code.addEventListener("input", () => {
     scheduleLookup();
 });
 
+els.scannerMode?.addEventListener("change", () => {
+    setCookie(COOKIE_SCANNER_MODE, els.scannerMode.checked ? "1" : "0");
+    updateScannerUI();
+});
+
+els.scannerDelayInput?.addEventListener("change", () => {
+    setCookie(COOKIE_SCANNER_DELAY, els.scannerDelayInput.value);
+});
+
+els.btnRefreshAll?.addEventListener("click", refreshAllBooks);
+
+
+
 // ----- Boot -----
 window.addEventListener("load", () => {
     clearUI();
+
+    const mode = getCookie(COOKIE_SCANNER_MODE);
+    if (mode !== null && els.scannerMode) {
+        els.scannerMode.checked = mode === "1";
+    }
+
+    const delay = getCookie(COOKIE_SCANNER_DELAY);
+    if (delay && els.scannerDelayInput) {
+        els.scannerDelayInput.value = delay;
+    }
+
+    updateScannerUI();
+
     els.code.focus();
 });
