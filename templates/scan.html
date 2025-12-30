@@ -1,0 +1,41 @@
+<!-- templates/scan.html -->
+{% extends 'layout.html' %}
+
+{% block content %}
+<h1>Scan</h1>
+<p class="muted">Focus the input and scan. Press Enter or click Lookup.</p>
+
+<div class="row">
+    <input id="code" placeholder="Scan ISBN / ASIN…" autocomplete="off" />
+    <button id="btnLookup" type="button">Lookup</button>
+    <button id="btnSave" type="button" disabled>Save</button>
+    <button id="btnClear" type="button">Clear</button>
+
+    <label class="muted" style="display:flex;align-items:center;gap:8px;">
+        <input id="scannerMode" type="checkbox" />
+        Scanner mode
+    </label>
+    <input id="scannerDelay" type="number" min="50" step="50" value="250" style="width:110px" />
+    <span class="muted">ms</span>
+</div>
+
+<div id="status" class="card" style="display:none;"></div>
+
+<div id="preview" class="card" style="display:none;">
+    <div class="grid">
+        <div>
+            <img id="cover" alt="cover" style="display:none;" />
+        </div>
+        <div>
+            <div><strong id="title"></strong></div>
+            <div id="meta" class="muted"></div>
+            <div id="provider" class="muted"></div>
+        </div>
+    </div>
+</div>
+
+<h3>Raw JSON</h3>
+<pre id="raw">{}</pre>
+
+<script type="module" src="/static/js/scan.js"></script>
+{% endblock %}
