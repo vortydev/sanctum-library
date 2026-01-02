@@ -220,7 +220,7 @@ def scan_lookup():
         }), 200
 
     # isbn
-    book = fetch_book_with_fallback(value, merge=True, debug=True)
+    book = fetch_book_with_fallback(value, merge=True, debug=False)
     if not book:
         return jsonify({
             "kind": kind,

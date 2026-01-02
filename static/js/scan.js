@@ -238,8 +238,8 @@ els.btnSave.addEventListener("click", () => {
     els.code.focus();
 });
 els.btnClear.addEventListener("click", () => {
-    els.code.value = "";
     clearUI();
+    els.code.value = "";
     els.code.focus();
 
     if (lookupTimer) {
