@@ -6,8 +6,12 @@ from pathlib import Path
 # ========== Load environment ==========
 dotenv.load_dotenv()
 
+VERSION = os.getenv("VERSION")
+ENV_MODE = os.getenv("ENV_MODE", "dev")
+
 LOCAL_TZ = os.getenv("LOCAL_TZ", "America/Toronto")
 FLASK_PORT = int(os.getenv("FLASK_PORT", 5000))
+FLASK_ROOT = os.getenv("FLASK_ROOT", "")
 PER_PAGE = int(os.getenv("DEFAULT_PER_PAGE", "20"))
 
 # TTL (seconds). 0 or missing = never expire.
